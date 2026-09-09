@@ -105,7 +105,7 @@ button.small,.skill p,.tiny,label,.answer-options legend,details>summary{font-si
 @media(max-width:420px){.hero{flex-direction:column}.companion-hero{display:none}.theme-grid,.companion-grid,.badge-grid{grid-template-columns:1fr}.theme-info .row button{flex-basis:auto}.companion-card p{min-height:0}.collection-totals{gap:4px 8px}.collection-totals span{font-size:12px}#companionPortrait{flex-basis:75px}}
 @media print{.companion-hero,.reward-home,.reward-practice,.preview-banner,.collection-tabs,.collection-settings{display:none}.theme-grid,.badge-grid,.companion-grid{display:block}.theme-card,.badge-card,.companion-card{break-inside:avoid;margin-bottom:15px}body{color:#193f35;background:#fff}}
 
-</style></head><body><header><div class="brand"><span>✳</span>math garden</div><nav id="nav"></nav><select id="profile" aria-label="Choose profile"></select></header><main id="app"></main><div class="footer">Grow at your own pace · 105 minutes each Sunday–Saturday 🌱 &nbsp; Works offline · Your family's data stays in this browser</div><div id="toast" role="status"></div><input id="importFile" type="file" accept=".json,application/json" hidden>
+</style></head><body><header><div class="brand"><span>✳</span>math garden</div><nav id="nav"></nav><select id="profile" aria-label="Choose profile"></select></header><main id="app"></main><div class="footer">Grow at your own pace · 105 minutes each Sunday–Saturday 🌱 &nbsp; Local practice + optional private family cloud saving</div><div id="toast" role="status"></div><input id="importFile" type="file" accept=".json,application/json" hidden>
 <script>
 'use strict';
 const KEY='math-garden-v1', $=s=>document.querySelector(s), esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -432,7 +432,7 @@ function rhythmValidate(d){for(const c of d.children){
 function currentTrouble(c){const map=new Map();for(const a of c.attempts){if(!map.has(a.skill))map.set(a.skill,[]);map.get(a.skill).push(a)}return [...map].map(([id,h])=>({skill:id,name:skills.find(s=>s.id===id)?.name||id,standards:skills.find(s=>s.id===id)?.standards||[],lastPractisedAt:h.at(-1).at,...skillSnapshot(h)})).sort((a,b)=>Number(b.needsSupport)-Number(a.needsSupport)||a.recentIndependentAccuracy-b.recentIndependentAccuracy)}
 function makeProgressBackup(){rhythmFlush();const copy=JSON.parse(JSON.stringify(data));copy.exportedAt=new Date().toISOString();copy.backupFormat='math-garden-collection-v3';copy.trackingRules={weekStarts:'Sunday',weekEnds:'Saturday 23:59:59 local time',weeklyGoalMinutes:105,dailyGuideMinutes:15,flexibleDailyMinutes:true,idlePauseSeconds:90,timeZone:clockZone(),legacyTimes:'Estimated from historical answered-question durations; not counted a second time.'};for(const c of copy.children){rhythmEnsure(c);const keys=[...new Set([...c.activity.map(a=>a.weekStart),...c.attempts.map(a=>weekKey(a.localDay||localDay(a.at))),weekKey()])].sort();const skillStates=currentTrouble(c);c.reports={weeks:keys.map(k=>weeklySummary(c,k)),troubleAreas:skillStates.filter(s=>s.needsSupport),skillStates};}return copy}
 function rhythmVisible(){return document.visibilityState!=='hidden'&&(typeof document.hasFocus!=='function'||document.hasFocus())}
-function rhythmSessionStart(){rhythmStop();rhythmEnsure(child());Object.assign(rhythmClock,{childId:child().id,sessionId:`practice-${Date.now()}-${++rhythmClock.sequence}`,questionMs:0,sessionMs:0,manual:false,reason:'',lastInput:Date.now(),lastTick:Date.now(),lastSaved:Date.now()})}
+function rhythmSessionStart(){rhythmStop();rhythmEnsure(child());Object.assign(rhythmClock,{childId:child().id,sessionId:`practice-${crypto.randomUUID()}`,questionMs:0,sessionMs:0,manual:false,reason:'',lastInput:Date.now(),lastTick:Date.now(),lastSaved:Date.now()})}
 function rhythmQuestionStart(){rhythmTick();const now=Date.now();Object.assign(rhythmClock,{running:true,childId:child().id,skill:session.question.id,mode:session.mode,lastTick:now,lastInput:now,questionMs:0,reason:rhythmClock.manual?'manual':''});}
 function rhythmTick(now=Date.now()){
  if(!rhythmClock.running)return;const prev=rhythmClock.lastTick;rhythmClock.lastTick=now;const c=data.children.find(c=>c.id===rhythmClock.childId);
@@ -607,7 +607,7 @@ const fresh=()=>({version:1,children:[{id:'oliwia',name:'Oliwia',grade:5,session
 let data=fresh(),storageOK=true;try{let raw=localStorage.getItem(KEY);if(raw)data=validate(JSON.parse(raw));}catch(e){storageOK=false;}
 let role='child',page='home',filter='All',search='',session=null,days=0;
 function child(){return data.children.find(c=>c.id===data.selected)||data.children[0]}function available(){return gradeAvailable()}
-function save(){rewardsSyncAll(true);try{localStorage.setItem(KEY,JSON.stringify(data));storageOK=true}catch(e){storageOK=false;toast('Browser saving unavailable. Export JSON from Parent space.')}}
+function save(){rewardsSyncAll(true);try{localStorage.setItem(KEY,JSON.stringify(data));storageOK=true}catch(e){storageOK=false;toast('Browser saving unavailable. Export JSON from Parent space.')}if(typeof cloudChanged==='function')cloudChanged()}
 function toast(t){$('#toast').textContent=t;$('#toast').style.display='block';setTimeout(()=>$('#toast').style.display='none',4200)}
 function attempts(id){return child().attempts.filter(a=>a.skill===id)}function metric(id){const a=attempts(id),recent=a.slice(-10);return {n:a.length,score:recent.length?Math.round(recent.filter(x=>x.correct&&!x.hint).length/recent.length*100):0,level:a.length?a[a.length-1].nextLevel:1}}
 function candidates(){return gradeAvailable().slice().sort((a,b)=>gradeWeight(b)-gradeWeight(a))}function weight(s){return gradeWeight(s)}
@@ -652,10 +652,132 @@ function check(raw){return gradeCheck(raw)}
 function validate(d){if(!d||d.version!==1||!Array.isArray(d.children)||!d.children.length||d.children.length>20)throw Error('Invalid family file');let ids=new Set();for(const c of d.children){if(typeof c.id!=='string'||! /^[a-zA-Z0-9_-]{1,80}$/.test(c.id)||ids.has(c.id)||typeof c.name!=='string'||!c.name.trim()||c.name.length>40||!['PYP','MYP'].includes(c.stage)||!Array.isArray(c.attempts)||c.attempts.length>100000||!Array.isArray(c.assignments)||c.assignments.some(id=>!skills.some(s=>s.id===id)))throw Error('Invalid profile');if(c.grade!==undefined&&![5,7].includes(c.grade))throw Error('Unsupported grade');if(c.sessionSize!==undefined&&![10,20,30].includes(c.sessionSize))throw Error('Invalid practice length');c.grade=profileGrade(c);c.sessionSize=c.sessionSize||20;ids.add(c.id);for(const a of c.attempts){if(!skills.some(s=>s.id===a.skill)||typeof a.correct!=='boolean'||typeof a.hint!=='boolean'||!Number.isFinite(a.at)||a.at<0||a.at>8640000000000000||!Number.isFinite(a.seconds)||a.seconds<0||a.seconds>86400||![1,2,3].includes(a.level)||![1,2,3].includes(a.nextLevel)||typeof a.prompt!=='string'||a.prompt.length>2000||typeof a.answer!=='string'||a.answer.length>100||!['adaptive','diagnostic','skill'].includes(a.mode))throw Error('Invalid answer history');for(const field of ['context','expectedAnswer','explanation'])if(a[field]!==undefined&&(typeof a[field]!=='string'||a[field].length>4000))throw Error('Invalid question details')}}if(!ids.has(d.selected))d.selected=d.children[0].id;return rewardsValidate(rhythmValidate(d))}
 document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.page||b.dataset.skill||b.dataset.start||b.dataset.action==='exit')rhythmStop();if(b.dataset.page){page=b.dataset.page;if(page==='parent'&&role!=='parent')page='home';session=null;render();window.scrollTo(0,0)}if(b.dataset.skill)start('skill',b.dataset.skill);if(b.dataset.start)start(b.dataset.start);if(b.dataset.choice!==undefined&&session&&!session.answered){check(b.dataset.choice)}const a=b.dataset.action;if(a==='hint'&&!session.answered){session.hinted=true;$('#help').innerHTML=`<p class="notice">${session.question.hint}</p>`;b.textContent='Hint shown'}if(a==='next'){if(session.count>=session.total)render();else next()}if(a==='exit'){session=null;page='home';render()}if(a==='print')window.print();if(a==='export'){let blob=new Blob([JSON.stringify(makeProgressBackup(),null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='math-garden-progress-'+new Date().toISOString().slice(0,10)+'.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('JSON backup downloaded')}if(a==='import')$('#importFile').click();if(a==='addChild'){let name=prompt('Child’s name');if(name&&name.trim()){const id='child-'+Date.now();data.children.push({id,name:name.trim().slice(0,40),grade:5,sessionSize:20,stage:'PYP',attempts:[],assignments:[]});data.selected=id;save();render()}}});
 document.addEventListener('submit',e=>{if(e.target.id==='answerForm'){e.preventDefault();check($('#answer').value)}if(e.target.id==='editChild'){e.preventDefault();const f=new FormData(e.target);child().name=String(f.get('name')).trim()||child().name;child().grade=Number(f.get('grade'));child().stage=child().grade===5?'PYP':'MYP';child().sessionSize=Number(f.get('sessionSize'));child().assignments=child().assignments.filter(id=>available().some(s=>s.id===id));save();render();toast('Profile saved')}});
-document.addEventListener('change',async e=>{let t=e.target;if(t.id==='profile'){rhythmStop();rhythmResetCalendar();if(t.value==='parent'){role='parent';page='parent'}else{role='child';data.selected=t.value;page='home'}session=null;save();render()}if(t.id==='parentChild'){rhythmStop();rhythmResetCalendar();data.selected=t.value;save();render()}if(t.id==='strand'){filter=t.value;render()}if(t.id==='days'){days=+t.value;render()}if(t.dataset.assign){child().assignments=child().assignments.filter(id=>id!==t.dataset.assign);if(t.checked)child().assignments.push(t.dataset.assign);save()}if(t.id==='importFile'&&t.files[0]){try{if(t.files[0].size>25000000)throw Error('File too large');let incoming=validate(JSON.parse(await t.files[0].text()));if(confirm('Replace current family progress with '+incoming.children.length+' imported profiles? Export a backup first if you need to keep the current data.')){rhythmStop();data=incoming;session=null;page='parent';rhythmResetCalendar();save();render();toast('Family progress restored')}}catch(err){toast('Import rejected: '+err.message)}t.value=''}});
+document.addEventListener('change',async e=>{let t=e.target;if(t.id==='profile'){rhythmStop();rhythmResetCalendar();if(t.value==='parent'){role='parent';page='parent'}else{role='child';data.selected=t.value;page='home'}session=null;save();render()}if(t.id==='parentChild'){rhythmStop();rhythmResetCalendar();data.selected=t.value;save();render()}if(t.id==='strand'){filter=t.value;render()}if(t.id==='days'){days=+t.value;render()}if(t.dataset.assign){child().assignments=child().assignments.filter(id=>id!==t.dataset.assign);if(t.checked)child().assignments.push(t.dataset.assign);save()}if(t.id==='importFile'&&t.files[0]){try{if(t.files[0].size>25000000)throw Error('File too large');let incoming=validate(JSON.parse(await t.files[0].text()));if(confirm('Import and merge family progress from '+incoming.children.length+' profiles? Cloud history is retained. Export a backup first.')){rhythmStop();data=incoming;session=null;page='parent';rhythmResetCalendar();save();render();toast('Family progress restored')}}catch(err){toast('Import rejected: '+err.message)}t.value=''}});
 document.addEventListener('input',e=>{if(e.target.id==='search'){const pos=e.target.selectionStart;search=e.target.value;render();$('#search').focus();$('#search').setSelectionRange(pos,pos)}});
 const previews=new Map();function previewVisual(id){if(!previews.has(id)){let q=visualQuestion(id,1);previews.set(id,q.visual||'<div class="preview-options">'+q.options.slice(0,2).map(o=>o.visual).join('')+'</div>')}return previews.get(id)}
 for(const c of data.children)rhythmEnsure(c);
 rewardsSyncAll(false);
 render();
+</script>
+<script>
+// Math Garden family sync v1. All network writes are restricted by Firestore rules.
+const FAMILY_UID = 'T9QRyWEjRGTwEZEmUF0ciVGizx13';
+const FIREBASE_CONFIG = {apiKey:'AIzaSyD6nMWa9QCu9Bd0Va8erv3yvw-cuhxy_BE',authDomain:'math-garden-b16dd.firebaseapp.com',projectId:'math-garden-b16dd',storageBucket:'math-garden-b16dd.firebasestorage.app',messagingSenderId:'601005765893',appId:'1:601005765893:web:b593abfd5980ee675f336c'};
+const CLOUD_KEY = KEY + '-cloud-records-v1';
+const cloud = {records:{},known:new Map(),dirty:new Set(),observed:new Map(),user:null,sdk:null,db:null,auth:null,busy:false,ready:false,cursor:null,lastSaved:null,message:'Saved on this device · sign in for cloud backup',timer:null,tabId:crypto.randomUUID(),blocked:false};
+const cloneCloud = x=>JSON.parse(JSON.stringify(x));
+function recordHash(text){let a=2166136261,b=2246822519,c=3266489917,d=668265263;for(let i=0;i<text.length;i++){const n=text.charCodeAt(i);a=Math.imul(a^n,16777619);b=Math.imul(b^n,2246822519);c=Math.imul(c^n,3266489917);d=Math.imul(d^n,668265263)}return [a,b,c,d].map(n=>(n>>>0).toString(16).padStart(8,'0')).join('')}
+function recordKey(r){return r.child+'_'+r.kind+'_'+r.key}
+function recordVersion(r){return JSON.stringify([r.value,r.clock,r.writer])}
+function mergeRecord(a,b){
+ if(!a)return b;if(!b)return a;
+ if(a.kind==='activity')return a.value.endAt>b.value.endAt?a:b;
+ if(a.kind==='unlock')return a.clock<b.clock?a:a.clock>b.clock?b:JSON.stringify(a)<JSON.stringify(b)?a:b;
+ if(a.kind==='attempt')return JSON.stringify(a)<JSON.stringify(b)?a:b;
+ return a.clock>b.clock?a:a.clock<b.clock?b:a.writer>b.writer?a:b;
+}
+function cloudPut(r){const key=recordKey(r),before=cloud.records[key],merged=mergeRecord(before,r);cloud.records[key]=merged;if(!before||recordVersion(before)!==recordVersion(merged))cloud.dirty.add(key)}
+function cloudCapture(initial=false,persist=true){
+ for(const c of data.children){
+  const r=rewardsEnsure(c);
+  for(const a of c.attempts){const identity=JSON.stringify([a.at,a.skill,a.prompt,a.answer,a.correct,a.hint,a.mode]);cloudPut({child:c.id,kind:'attempt',key:recordHash(identity),value:cloneCloud(a),clock:0,writer:''})}
+  for(const a of c.activity){a._cloudKey=a._cloudKey||recordHash(a.id+'|'+a.sessionId+'|'+a.startAt);cloudPut({child:c.id,kind:'activity',key:a._cloudKey,value:cloneCloud(a),clock:0,writer:''})}
+  const fields={name:c.name,grade:c.grade,stage:c.stage,sessionSize:c.sessionSize,assignments:c.assignments,theme:r.theme,companion:r.companion,motion:r.motion,showCompanion:r.showCompanion};
+  const defaultChild=fresh().children.find(x=>x.id===c.id),defaults={...defaultChild,theme:'garden',companion:null,motion:true,showCompanion:true};
+  for(const [key,value] of Object.entries(fields)){const id=c.id+'_field_'+key,serialized=JSON.stringify(value),old=cloud.observed.get(id);if(old!==serialized){if(!initial||!cloud.records[id])cloudPut({child:c.id,kind:'field',key,value:cloneCloud(value),clock:initial?(serialized===JSON.stringify(defaults[key])?-1:0):Date.now(),writer:initial?'':cloud.tabId});cloud.observed.set(id,serialized)}}
+  for(const [type,values] of [['theme',r.themes],['companion',r.companions]])for(const value of values){const key=type+'-'+value,id=c.id+'_unlock_'+key;if(!cloud.records[id])cloudPut({child:c.id,kind:'unlock',key,value:{type,id:value},clock:initial?0:Date.now(),writer:cloud.tabId})}
+ }
+ if(persist)cloudPersist();
+}
+function cloudPersist(){try{localStorage.setItem(CLOUD_KEY,JSON.stringify({records:cloud.records}));return true}catch(e){cloud.message='Device storage full · keep this tab open and export a backup';cloudUI();return false}}
+function cloudProject(){
+ const groups=new Map();for(const r of Object.values(cloud.records)){if(!groups.has(r.child))groups.set(r.child,[]);groups.get(r.child).push(r)}
+ const next=cloneCloud(data);
+ for(const [id,records] of groups){
+  let c=next.children.find(c=>c.id===id);if(!c){c={id,name:'Learner',grade:5,stage:'PYP',sessionSize:20,assignments:[],attempts:[],activityVersion:1,activity:[]};next.children.push(c)}
+  c.attempts=records.filter(r=>r.kind==='attempt').map(r=>cloneCloud(r.value)).sort((a,b)=>a.at-b.at||a.skill.localeCompare(b.skill));
+  c.activity=records.filter(r=>r.kind==='activity').map(r=>cloneCloud(r.value)).sort((a,b)=>a.startAt-b.startAt||a.id.localeCompare(b.id));c.activityVersion=1;
+  // Record ids from independent old browsers may coincide; ledger ids only need local uniqueness.
+  const ids=new Set();for(const a of c.activity){if(ids.has(a.id))a.id='merged-'+recordHash(a.id+'|'+a.sessionId+'|'+a.startAt);ids.add(a.id)}
+  c.rewards={version:1,themes:['garden'],companions:[],theme:'garden',companion:null,motion:true,showCompanion:true,seenDays:[],seenWeeks:[]};
+  for(const r of records.filter(r=>r.kind==='field')){if(['name','grade','stage','sessionSize','assignments'].includes(r.key))c[r.key]=cloneCloud(r.value);else c.rewards[r.key]=cloneCloud(r.value)}
+  const facts=rewardFacts(c),claims=records.filter(r=>r.kind==='unlock').sort((a,b)=>a.clock-b.clock||a.key.localeCompare(b.key));
+  c.rewards.themes=['garden',...new Set(claims.filter(r=>r.value.type==='theme'&&r.value.id!=='garden').map(r=>r.value.id))].slice(0,facts.days+1);
+  c.rewards.companions=[...new Set(claims.filter(r=>r.value.type==='companion').map(r=>r.value.id))].slice(0,facts.weeks);
+  if(!c.rewards.themes.includes(c.rewards.theme))c.rewards.theme=c.rewards.themes.at(-1);
+  if(!c.rewards.companions.includes(c.rewards.companion))c.rewards.companion=c.rewards.companions[0]||null;
+  c.rewards.seenDays=facts.dayKeys;c.rewards.seenWeeks=facts.weekKeys;c.stage=c.grade===7?'MYP':'PYP';
+ }
+ data=validate(next);
+ // Record projected fields before the next save, so downloads never become new edits.
+ for(const c of data.children){const r=c.rewards;for(const [key,value] of Object.entries({name:c.name,grade:c.grade,stage:c.stage,sessionSize:c.sessionSize,assignments:c.assignments,theme:r.theme,companion:r.companion,motion:r.motion,showCompanion:r.showCompanion}))cloud.observed.set(c.id+'_field_'+key,JSON.stringify(value))}
+ try{localStorage.setItem(KEY,JSON.stringify(data));storageOK=true}catch(e){storageOK=false}
+ if(page!=='practice')render();else{rewardsApplyTheme();rhythmUpdateLabels()}
+}
+function cloudChanged(){if(!cloud.ready)return;cloudCapture();if(cloud.user){cloud.message=navigator.onLine?'Changes waiting to sync…':'Offline · saved on this device';cloudUI();clearTimeout(cloud.timer);cloud.timer=setTimeout(cloudSync,1800)}}
+function cloudUI(){const label=document.getElementById('cloudStatus');if(label)label.textContent=cloud.message;const btn=document.getElementById('cloudOpen');if(btn)btn.textContent=cloud.user?'Cloud account':'Sign in & sync';const summary=document.getElementById('cloudAccount');if(summary)summary.textContent=cloud.user?'Signed in to your family account. Both children have separate progress.':'Sign in once on each family device. Existing progress will be merged into your family account.';const form=document.getElementById('cloudLogin');if(form)form.hidden=!!cloud.user;const out=document.getElementById('cloudLogout');if(out)out.hidden=!cloud.user}
+function cloudError(e){const code=e.code||'';if(code.includes('permission-denied'))return 'Cloud access denied · publish the supplied Firestore rules, then Retry';if(code.includes('invalid-credential')||code.includes('wrong-password')||code.includes('user-not-found'))return 'Email or password is incorrect.';if(code.includes('too-many-requests'))return 'Too many sign-in attempts. Please try again later.';if(code.includes('operation-not-allowed'))return 'Enable Email/Password in Firebase Authentication.';if(code.includes('unauthorized-domain'))return 'Add wojogi.github.io in Authentication → Settings → Authorized domains.';if(code.includes('unavailable')||code.includes('network')||!navigator.onLine)return 'Offline · saved on this device, waiting to reconnect';return 'Cloud unavailable · progress remains on this device. Retry when connected.'}
+async function cloudLoadSDK(){
+ if(cloud.sdk)return cloud.sdk;
+ const base='https://www.gstatic.com/firebasejs/12.18.0/';
+ const [appSDK,authSDK,fsSDK]=await Promise.all([import(base+'firebase-app.js'),import(base+'firebase-auth.js'),import(base+'firebase-firestore.js')]);
+ const app=appSDK.initializeApp(FIREBASE_CONFIG);cloud.sdk={...authSDK,...fsSDK};cloud.auth=authSDK.getAuth(app);cloud.db=fsSDK.getFirestore(app);
+ await authSDK.setPersistence(cloud.auth,authSDK.browserLocalPersistence);
+ authSDK.onAuthStateChanged(cloud.auth,async user=>{cloud.user=user&&user.uid===FAMILY_UID?user:null;cloud.cursor=null;cloud.known.clear();if(user&&!cloud.user){await authSDK.signOut(cloud.auth);cloud.message='Please sign in with the configured family account.'}else{cloud.message=cloud.user?'Connecting to your saved progress…':'Saved on this device · sign in for cloud backup'}cloudUI();if(cloud.user)cloudSync()});
+ return cloud.sdk;
+}
+let cloudSDKPromise=null;
+function cloudSDK(){if(!cloudSDKPromise)cloudSDKPromise=cloudLoadSDK().catch(e=>{cloudSDKPromise=null;throw e});return cloudSDKPromise}
+async function cloudSync(){
+ if(cloud.busy||!cloud.user||cloud.blocked)return;
+ if(!navigator.onLine){cloud.message='Offline · saved on this device, waiting to reconnect';cloudUI();return}
+ cloud.busy=true;cloud.message='Syncing family progress…';cloudUI();
+ try{
+  cloudCapture();const sdk=cloud.sdk,col=sdk.collection(cloud.db,'families',FAMILY_UID,'records');
+  const query=cloud.cursor?sdk.query(col,sdk.where('updatedAt','>=',cloud.cursor)):col;
+  const snapshot=await sdk.getDocsFromServer(query);
+  // Capture again: an answer may have been added while the download was in flight.
+  cloudCapture();
+  for(const doc of snapshot.docs){const raw=doc.data(),r=JSON.parse(raw.payload);if(recordKey(r)!==doc.id)throw Error('Invalid cloud record');cloud.known.set(doc.id,recordVersion(r));cloudPut(r);if(raw.updatedAt&&(!cloud.cursor||raw.updatedAt.seconds>cloud.cursor.seconds||raw.updatedAt.seconds===cloud.cursor.seconds&&raw.updatedAt.nanoseconds>cloud.cursor.nanoseconds))cloud.cursor=raw.updatedAt}
+  cloudProject();cloudPersist();
+  const pending=Object.entries(cloud.records).filter(([key,r])=>cloud.known.get(key)!==recordVersion(r));
+  for(let i=0;i<pending.length;i+=80){
+   const chunk=pending.slice(i,i+80).map(([key])=>[key,cloneCloud(cloud.records[key])]);
+   const committed=await sdk.runTransaction(cloud.db,async tx=>{
+    const docs=await Promise.all(chunk.map(([key])=>tx.get(sdk.doc(col,key))));const result=[];
+    for(let j=0;j<chunk.length;j++){const [key,local]=chunk[j],remote=docs[j].exists()?JSON.parse(docs[j].data().payload):null,merged=mergeRecord(remote,local);if(!remote||recordVersion(remote)!==recordVersion(merged))tx.set(sdk.doc(col,key),{payload:JSON.stringify(merged),updatedAt:sdk.serverTimestamp()});result.push([key,merged])}return result;
+   });
+   for(const [key,r] of committed){cloud.known.set(key,recordVersion(r));cloudPut(r)}
+  }
+  cloudCapture();cloudProject();cloudPersist();
+  const remaining=Object.entries(cloud.records).some(([key,r])=>cloud.known.get(key)!==recordVersion(r));
+  cloud.lastSaved=Date.now();cloud.message=remaining?'New changes waiting to sync…':'Saved online · '+new Date(cloud.lastSaved).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  if(remaining){clearTimeout(cloud.timer);cloud.timer=setTimeout(cloudSync,1800)}
+ }catch(e){cloud.message=cloudError(e);console.warn('Math Garden sync:',e.code||e.message)}finally{cloud.busy=false;cloudUI()}
+}
+function cloudMount(){
+ const style=document.createElement('style');style.textContent='#cloudBar{max-width:1180px;margin:12px auto 0;padding:10px 20px;display:flex;gap:12px;align-items:center;justify-content:space-between;color:var(--ink);font-size:14px;flex-wrap:wrap}#cloudBar .row{gap:8px}#cloudDialog{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:20px;max-width:480px;width:calc(100% - 32px);padding:26px}#cloudDialog::backdrop{background:#102a245e}#cloudDialog input{display:block;width:100%;box-sizing:border-box;margin:8px 0 16px;padding:12px;font:inherit}#cloudDialog p{line-height:1.5}#cloudDialog [hidden]{display:none!important}';document.head.append(style);
+ const bar=document.createElement('section');bar.id='cloudBar';bar.setAttribute('aria-label','Cloud saving');bar.innerHTML='<span id="cloudStatus" role="status" aria-live="polite"></span><div class="row"><button id="cloudRetry" class="small secondary">Sync now</button><button id="cloudOpen" class="small secondary">Sign in &amp; sync</button></div>';document.querySelector('header').after(bar);
+ const dialog=document.createElement('dialog');dialog.id='cloudDialog';dialog.innerHTML='<div class="row spread"><h2>Family cloud saving</h2><button id="cloudClose" class="small secondary" aria-label="Close cloud account">Close</button></div><p id="cloudAccount"></p><form id="cloudLogin"><label for="cloudEmail">Family email</label><input id="cloudEmail" type="email" autocomplete="username" required><label for="cloudPassword">Math Garden password</label><input id="cloudPassword" type="password" autocomplete="current-password" required minlength="6"><button id="cloudSubmit" type="submit">Sign in &amp; merge progress</button></form><p id="cloudLoginMessage" role="status"></p><button id="cloudLogout" class="secondary" hidden>Sign out</button><p class="tiny muted">Your password goes directly to Firebase Authentication. Local progress stays on this device after signing out. Use this on family devices. Parent → Export JSON keeps an extra backup.</p>';document.body.append(dialog);
+ document.getElementById('cloudOpen').onclick=()=>{rhythmFlush();dialog.showModal();document.getElementById(cloud.user?'cloudClose':'cloudEmail').focus()};document.getElementById('cloudClose').onclick=()=>dialog.close();
+ document.getElementById('cloudRetry').onclick=async()=>{try{await cloudSDK();if(cloud.user)cloudSync();else dialog.showModal()}catch(e){cloud.message=cloudError(e);cloudUI()}};
+ document.getElementById('cloudLogin').onsubmit=async e=>{e.preventDefault();const msg=document.getElementById('cloudLoginMessage'),button=document.getElementById('cloudSubmit');button.disabled=true;msg.textContent='Signing in…';try{const sdk=await cloudSDK();const result=await sdk.signInWithEmailAndPassword(cloud.auth,document.getElementById('cloudEmail').value.trim(),document.getElementById('cloudPassword').value);document.getElementById('cloudPassword').value='';if(result.user.uid!==FAMILY_UID)throw Error('Wrong family');msg.textContent='Signed in. Check the save status above before closing this tab.';cloudUI()}catch(e){msg.textContent=e.message==='Wrong family'?'Please use your configured family account.':cloudError(e)}finally{button.disabled=false}};
+ document.getElementById('cloudLogout').onclick=async()=>{rhythmStop();if(cloud.busy){document.getElementById('cloudLoginMessage').textContent='Please wait for the current sync to finish.';return}await cloud.sdk.signOut(cloud.auth);document.getElementById('cloudLoginMessage').textContent='Signed out. Local progress is still on this device.'};
+}
+function cloudInit(){
+ cloudMount();
+ if(!storageOK){cloud.blocked=true;cloud.message='Browser storage needs attention · cloud sync is paused to protect existing progress';cloudUI();return}
+ try{const saved=localStorage.getItem(CLOUD_KEY);if(saved){const parsed=JSON.parse(saved);if(!parsed.records||typeof parsed.records!=='object')throw Error('Invalid sync cache');cloud.records=parsed.records}cloudCapture(true);cloudProject();cloud.ready=true;cloudPersist()}catch(e){cloud.blocked=true;cloud.message='Cloud setup paused · export your local progress before retrying';console.warn(e)}
+ cloudUI();
+ // Only sign-in credentials/tokens managed by Firebase Auth are persisted, never the password.
+ cloudSDK().catch(e=>{cloud.message=cloudError(e);cloudUI()});
+ setInterval(()=>{if(document.visibilityState==='visible')cloudSync()},30000);
+ window.addEventListener('online',()=>cloudSDK().then(()=>cloudSync()).catch(e=>{cloud.message=cloudError(e);cloudUI()}));
+ window.addEventListener('offline',()=>{cloud.message='Offline · saved on this device';cloudUI()});
+ window.addEventListener('pagehide',()=>{rhythmFlush();cloudCapture()});
+ // A second local tab must not erase an answer made in this tab.
+ window.addEventListener('storage',e=>{if(e.key!==CLOUD_KEY||!e.newValue)return;try{cloudCapture(false,false);const incoming=JSON.parse(e.newValue);for(const r of Object.values(incoming.records))cloudPut(r);cloudProject();cloudUI()}catch(err){cloud.message='Local tab sync needs attention · export a backup';cloudUI()}});
+}
+cloudInit();
+
 </script></body></html>
